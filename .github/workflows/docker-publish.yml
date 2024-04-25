@@ -22,6 +22,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.build-and-push.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -37,7 +39,7 @@ jobs:
       # https://github.com/sigstore/cosign-installer
       - name: Install cosign
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v3.5.0 #v3.1.1
+        uses: sigstore/cosign-installer@v3.5.0
         with:
           cosign-release: "v2.2.4"
 
@@ -92,3 +94,20 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout apps repo
+        uses: actions/checkout@v4
+        with:
+          repository: eliihen/gitops-fun
+          token: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Deploy to Kubernetes
+        run: |
+          echo "${{needs.build.outputs.new_tag}}" > ./env/in-cluster/testapp/currentTag.txt
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
+          git commit -am "Deploy version ${{github.ref_name}}"
+          git push
